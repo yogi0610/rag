@@ -20,9 +20,11 @@ except ImportError:
     BM25Retriever = None
 
 try:
+    # pyrefly: ignore [missing-import]
     from langchain.retrievers import EnsembleRetriever
 except ImportError:
     try:
+        # pyrefly: ignore [missing-import]
         from langchain_classic.retrievers import EnsembleRetriever
     except ImportError:
         EnsembleRetriever = None
@@ -82,7 +84,7 @@ st.set_page_config(
 load_dotenv()
 
 # Universal default parameters tuned for all conditions
-MODEL_NAME = "google/gemma-4-31b-it"
+MODEL_NAME = "openai/gpt-oss-20b"
 USE_HYBRID = True
 USE_RERANKER = True
 TOP_K = 4
@@ -128,6 +130,7 @@ def get_llm(key: str):
 @st.cache_resource(show_spinner=False)
 def get_reranker(key: str):
     try:
+        # pyrefly: ignore [missing-import]
         from langchain_nvidia_ai_endpoints import NVIDIARerank
         return NVIDIARerank(
             model="nvidia/llama-3.2-nv-rerankqa-1b-v2",

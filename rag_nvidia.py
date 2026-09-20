@@ -84,7 +84,7 @@ st.set_page_config(
 load_dotenv()
 
 # Universal default parameters tuned for all conditions
-MODEL_NAME = "openai/gpt-oss-20b"
+MODEL_NAME = "meta/muse-glimmer-30b"
 USE_HYBRID = True
 USE_RERANKER = True
 TOP_K = 4
@@ -124,7 +124,8 @@ def get_llm(key: str):
         model=MODEL_NAME,
         api_key=key,
         temperature=0.1,
-        max_tokens=1500
+        max_tokens=1500,
+        timeout=120
     )
 
 @st.cache_resource(show_spinner=False)
@@ -186,16 +187,19 @@ with btn_col2:
     if uploaded_files and st.button("📑 Summary", use_container_width=True):
         if st.session_state.doc_chunks:
             with st.spinner("Generating document summary..."):
-                sample_text = "\n\n".join([
-                    f"[{c.metadata.get('filename', 'Doc')}]: {c.page_content}"
-                    for c in st.session_state.doc_chunks[:8]
-                ])
-                summary_prompt = ChatPromptTemplate.from_messages([
-                    ("system", "You are an expert analyst. Provide a structured summary of the uploaded document(s) and suggest 3 insightful questions."),
-                    ("human", "Documents preview:\n{text}")
-                ])
-                summary_chain = summary_prompt | llm | StrOutputParser()
-                st.session_state.doc_summary = summary_chain.invoke({"text": sample_text})
+                try:
+                    sample_text = "\n\n".join([
+                        f"[{c.metadata.get('filename', 'Doc')}]: {c.page_content}"
+                        for c in st.session_state.doc_chunks[:8]
+                    ])
+                    summary_prompt = ChatPromptTemplate.from_messages([
+                        ("system", "You are an expert analyst. Provide a structured summary of the uploaded document(s) and suggest 3 insightful questions."),
+                        ("human", "Documents preview:\n{text}")
+                    ])
+                    summary_chain = summary_prompt | llm | StrOutputParser()
+                    st.session_state.doc_summary = summary_chain.invoke({"text": sample_text})
+                except Exception as e:
+                    st.error(f"⚠️ Could not generate summary (NVIDIA API: {e})")
 
 # Ingest and Index Multiple PDF Documents
 if uploaded_files:
@@ -435,26 +439,38 @@ if user_query := st.chat_input(input_placeholder):
             context_text = format_docs(retrieved_docs)
 
         # Step C: Stream Answer
-        stream = qa_chain.stream({
-            "context": context_text,
-            "chat_history": langchain_history,
-            "question": user_query
-        })
-        
-        full_answer = st.write_stream(stream)
+        full_answer = None
+        try:
+            stream = qa_chain.stream({
+                "context": context_text,
+                "chat_history": langchain_history,
+                "question": user_query
+            })
+            full_answer = st.write_stream(stream)
+        except Exception as e:
+            err_msg = str(e)
+            if "timeout" in err_msg.lower():
+                st.error(
+                    f"⏱️ **NVIDIA NIM Timeout**: The model `{MODEL_NAME}` took longer than 120 seconds to respond. "
+                    "This typically occurs when NVIDIA's hosted endpoints for this model are under heavy load or queuing requests. "
+                    "Please try your question again, or switch to a high-availability model such as `google/gemma-4-31b-it` or `meta/llama-3.3-70b-instruct`."
+                )
+            else:
+                st.error(f"⚠️ **Error generating response**: {err_msg}")
 
         # Step D: Citations with Document Names
-        if retrieved_docs:
-            with st.expander(f"🔍 Sources ({len(retrieved_docs)})", expanded=False):
-                for idx, doc in enumerate(retrieved_docs, start=1):
-                    doc_name = doc.metadata.get("filename", "Document")
-                    page = doc.metadata.get("page", 0)
-                    page_num = page + 1 if isinstance(page, int) else page
-                    st.markdown(f"**Source #{idx} — `{doc_name}` (Page {page_num})**")
-                    st.code(doc.page_content, language="text")
+        if full_answer:
+            if retrieved_docs:
+                with st.expander(f"🔍 Sources ({len(retrieved_docs)})", expanded=False):
+                    for idx, doc in enumerate(retrieved_docs, start=1):
+                        doc_name = doc.metadata.get("filename", "Document")
+                        page = doc.metadata.get("page", 0)
+                        page_num = page + 1 if isinstance(page, int) else page
+                        st.markdown(f"**Source #{idx} — `{doc_name}` (Page {page_num})**")
+                        st.code(doc.page_content, language="text")
 
-    st.session_state.messages.append({
-        "role": "assistant",
-        "content": full_answer,
-        "sources": retrieved_docs
-    })
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": full_answer,
+                "sources": retrieved_docs
+            })

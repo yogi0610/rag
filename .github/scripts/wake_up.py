@@ -1,7 +1,7 @@
 import time
 from playwright.sync_api import sync_playwright
 
-URL = "https://rag-pdf-sithes.streamlit.app/"
+URL = "https://ragyogi.streamlit.app/"
 
 # Selectors that indicate the Streamlit app has fully booted
 APP_LOADED_SELECTORS = [

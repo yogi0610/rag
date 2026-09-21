@@ -2,13 +2,14 @@ name: Keep Streamlit App Awake
 
 on:
   schedule:
-    # Runs every 4 hours (at minute 0) to prevent sleep and auto-wake if hibernating
-    - cron: "0 */4 * * *"
+    # Runs every 11 hours to prevent 12-hour inactivity sleep
+    - cron: "0 */11 * * *"
   workflow_dispatch: # Allows manual trigger anytime from GitHub Actions tab
 
 jobs:
   keep-alive:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
